@@ -5,6 +5,7 @@ import (
 	"github.com/mhannig/gitbase"
 
 	"encoding/json"
+	"io/ioutil"
 	"net/http"
 
 	"log"
@@ -175,15 +176,36 @@ func apiArchiveCreate(
 		return JsonError(err, 500)
 	}
 
+	key := params.ByName("id") // Routing demands a rename here
+	if key == "" {
+		return JsonError("Missing parameter: key", 500)
+	}
+
 	archive, err := collection.NextArchive("API created archive")
 	if err != nil {
 		return JsonError(err, 500)
 	}
 
-	_ = archive
-	// Store body
+	// Retrieve body
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		return JsonError(err, 500)
+	}
 
-	return JsonSuccess("OK")
+	err = archive.Put(key, body, "initial upload")
+	if err != nil {
+		return JsonError(err, 500)
+	}
+
+	documents, err := archive.Documents()
+	if err != nil {
+		return JsonError(err, 500)
+	}
+
+	return JsonSuccess(Archive{
+		Id:        archive.Id,
+		Documents: documents,
+	})
 }
 
 /*
@@ -318,8 +340,49 @@ func apiArchiveGetDocumentRevisions(
 func apiArchiveUpdateDocument(
 	ctx *ApiContext, req *http.Request, params httprouter.Params,
 ) *ApiResponse {
+	collectionId := params.ByName("collection")
+	collection, err := ctx.Repository.Use(collectionId)
+	if err != nil {
+		return JsonError(err, 500)
+	}
+	archiveId, err := strconv.ParseUint(params.ByName("id"), 10, 64)
 
-	return JsonSuccess("OK")
+	archive, err := collection.Find(uint64(archiveId))
+	if err != nil {
+		return JsonError(err, 500)
+	}
+
+	key := params.ByName("key")
+	if key == "" {
+		return JsonError("Missing parameter: key", 500)
+	}
+
+	// Retrieve body
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		return JsonError(err, 500)
+	}
+
+	err = archive.Put(key, body, "update")
+	if err != nil {
+		return JsonError(err, 500)
+	}
+
+	// Get revisions
+	history, err := archive.History(key)
+	if err != nil {
+		return JsonError(err, 500)
+	}
+
+	result := []ArchiveRevision{}
+	for _, commit := range history {
+		result = append(result, ArchiveRevision{
+			Id:        commit.Id,
+			CreatedAt: commit.CreatedAt,
+		})
+	}
+
+	return JsonSuccess(result)
 }
 
 /*
