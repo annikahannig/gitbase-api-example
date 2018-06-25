@@ -214,6 +214,22 @@ func apiArchiveCreate(
 func apiArchiveDelete(
 	ctx *ApiContext, req *http.Request, params httprouter.Params,
 ) *ApiResponse {
+	collectionId := params.ByName("collection")
+	collection, err := ctx.Repository.Use(collectionId)
+	if err != nil {
+		return JsonError(err, 500)
+	}
+	archiveId, err := strconv.ParseUint(params.ByName("id"), 10, 64)
+
+	archive, err := collection.Find(uint64(archiveId))
+	if err != nil {
+		return JsonError("archive not found", 404)
+	}
+
+	err = archive.Destroy("destroyed via api")
+	if err != nil {
+		return JsonError("archive delete error", 500)
+	}
 
 	return JsonSuccess("OK")
 }
@@ -233,7 +249,7 @@ func apiArchiveListDocuments(
 
 	archive, err := collection.Find(uint64(archiveId))
 	if err != nil {
-		return JsonError(err, 500)
+		return JsonError("archive not found", 404)
 	}
 
 	documents, err := archive.Documents()
@@ -276,13 +292,13 @@ func apiArchiveGetDocument(
 		// Fetch head
 		document, err = archive.Fetch(key)
 		if err != nil {
-			return JsonError(err, 500)
+			return JsonError("document not found", 404)
 		}
 	} else {
 		// Fetch with revision
 		document, err = archive.FetchRevision(key, revs[0])
 		if err != nil {
-			return JsonError(err, 500)
+			return JsonError("document not found", 404)
 		}
 
 	}
@@ -310,7 +326,7 @@ func apiArchiveGetDocumentRevisions(
 
 	archive, err := collection.Find(uint64(archiveId))
 	if err != nil {
-		return JsonError(err, 404)
+		return JsonError("archive not found", 404)
 	}
 
 	key := params.ByName("key")
@@ -320,7 +336,7 @@ func apiArchiveGetDocumentRevisions(
 
 	history, err := archive.History(key)
 	if err != nil {
-		return JsonError(err, 500)
+		return JsonError("document not found", 404)
 	}
 
 	result := []ArchiveRevision{}
@@ -349,7 +365,7 @@ func apiArchiveUpdateDocument(
 
 	archive, err := collection.Find(uint64(archiveId))
 	if err != nil {
-		return JsonError(err, 500)
+		return JsonError("archive not found", 404)
 	}
 
 	key := params.ByName("key")
@@ -391,5 +407,28 @@ func apiArchiveUpdateDocument(
 func apiArchiveDeleteDocument(
 	ctx *ApiContext, req *http.Request, params httprouter.Params,
 ) *ApiResponse {
+	collectionId := params.ByName("collection")
+	collection, err := ctx.Repository.Use(collectionId)
+	if err != nil {
+		return JsonError(err, 500)
+	}
+	archiveId, err := strconv.ParseUint(params.ByName("id"), 10, 64)
+
+	key := params.ByName("key")
+	if key == "" {
+		return JsonError("Missing parameter: key", 500)
+	}
+
+	archive, err := collection.Find(uint64(archiveId))
+	if err != nil {
+		return JsonError("archive not found", 404)
+	}
+
+	// Remove document from archive
+	err = archive.Remove(key, "removed via api")
+	if err != nil {
+		return JsonError(err, 500)
+	}
+
 	return JsonSuccess("OK")
 }
