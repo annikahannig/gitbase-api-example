@@ -1,6 +1,9 @@
 package main
 
 import (
+	"flag"
+	"fmt"
+	"log"
 	"os"
 
 	"net/http"
@@ -24,9 +27,9 @@ func main() {
 	}
 
 	// Setup repository
-	repo, err := NewRepository(config.RepoPath)
+	repo, err := gitbase.NewRepository(config.RepoPath)
 	if err != nil {
-		t.Error("Could not initialize or open repo:", err)
+		log.Fatal("Could not initialize or open repo:", err)
 		return
 	}
 
